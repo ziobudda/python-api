@@ -1,0 +1,127 @@
+import pytest
+from fastapi.testclient import TestClient
+from app import app
+
+client = TestClient(app)
+
+def test_get_items():
+    """
+    Test per verificare che la route GET /api/items funzioni correttamente.
+    """
+    response = client.get("/api/items")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert "data" in data
+    assert isinstance(data["data"], list)
+    assert "meta" in data
+    assert data["meta"]["total"] >= 0
+
+def test_get_item():
+    """
+    Test per verificare che la route GET /api/items/{item_id} funzioni correttamente.
+    """
+    # Prima creiamo un elemento da recuperare
+    create_response = client.post(
+        "/api/items", 
+        json={
+            "name": "Articolo test",
+            "description": "Descrizione test",
+            "price": 99.99,
+            "quantity": 5
+        }
+    )
+    assert create_response.status_code == 200
+    created_item = create_response.json()["data"]
+    item_id = created_item["id"]
+    
+    # Ora verifichiamo che possiamo recuperarlo
+    response = client.get(f"/api/items/{item_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["id"] == item_id
+    assert data["data"]["name"] == "Articolo test"
+
+def test_create_item():
+    """
+    Test per verificare che la route POST /api/items funzioni correttamente.
+    """
+    response = client.post(
+        "/api/items", 
+        json={
+            "name": "Nuovo articolo",
+            "description": "Descrizione dell'articolo",
+            "price": 149.99,
+            "quantity": 10
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["name"] == "Nuovo articolo"
+    assert data["data"]["price"] == 149.99
+    assert data["data"]["id"] is not None
+
+def test_update_item():
+    """
+    Test per verificare che la route PUT /api/items/{item_id} funzioni correttamente.
+    """
+    # Prima creiamo un elemento da aggiornare
+    create_response = client.post(
+        "/api/items", 
+        json={
+            "name": "Articolo da aggiornare",
+            "description": "Da modificare",
+            "price": 199.99,
+            "quantity": 3
+        }
+    )
+    assert create_response.status_code == 200
+    created_item = create_response.json()["data"]
+    item_id = created_item["id"]
+    
+    # Ora lo aggiorniamo
+    response = client.put(
+        f"/api/items/{item_id}",
+        json={
+            "name": "Articolo aggiornato",
+            "description": "Descrizione modificata",
+            "price": 249.99,
+            "quantity": 5
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert data["data"]["id"] == item_id
+    assert data["data"]["name"] == "Articolo aggiornato"
+    assert data["data"]["price"] == 249.99
+
+def test_delete_item():
+    """
+    Test per verificare che la route DELETE /api/items/{item_id} funzioni correttamente.
+    """
+    # Prima creiamo un elemento da eliminare
+    create_response = client.post(
+        "/api/items", 
+        json={
+            "name": "Articolo da eliminare",
+            "description": "Sarà eliminato",
+            "price": 49.99,
+            "quantity": 2
+        }
+    )
+    assert create_response.status_code == 200
+    created_item = create_response.json()["data"]
+    item_id = created_item["id"]
+    
+    # Ora lo eliminiamo
+    response = client.delete(f"/api/items/{item_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    
+    # Verifichiamo che sia stato effettivamente eliminato
+    get_response = client.get(f"/api/items/{item_id}")
+    assert get_response.status_code == 404

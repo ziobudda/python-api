@@ -1,0 +1,183 @@
+from fastapi import APIRouter, HTTPException, Query, Path, Depends
+from api.utils.auth import token_dependency
+from typing import Dict, List, Optional
+from api.utils.responses import success_response, error_response
+from pydantic import BaseModel
+
+# Definizione del router per questo gruppo di endpoint
+router = APIRouter(prefix="/api/items", tags=["Items"])
+
+# Modello Pydantic per la validazione degli elementi
+class Item(BaseModel):
+    id: Optional[int] = None
+    name: str
+    description: Optional[str] = None
+    price: float
+    quantity: int = 0
+
+# Database fittizio in memoria per l'esempio
+items_db = {
+    1: Item(id=1, name="Laptop", description="Portatile 15 pollici", price=899.99, quantity=10),
+    2: Item(id=2, name="Smartphone", description="Ultimo modello", price=699.99, quantity=15),
+    3: Item(id=3, name="Webcam HD", description="1080p con microfono", price=79.99, quantity=20)
+}
+next_id = 4
+
+@router.get("/")
+async def get_items(
+    _: str = token_dependency,
+    skip: int = Query(0, description="Quanti elementi saltare"),
+    limit: int = Query(10, description="Numero massimo di elementi da restituire")
+) -> Dict:
+    """
+    Recupera un elenco di elementi con paginazione.
+    
+    Args:
+        skip: Numero di elementi da saltare
+        limit: Numero massimo di elementi da restituire
+        
+    Returns:
+        Dict: Risposta con l'elenco degli elementi
+    """
+    items = list(items_db.values())
+    paginated_items = items[skip:skip + limit]
+    
+    return success_response(
+        data=paginated_items,
+        meta={
+            "total": len(items),
+            "skip": skip,
+            "limit": limit,
+            "count": len(paginated_items)
+        }
+    )
+
+@router.get("/{item_id}")
+async def get_item(
+    _: str = token_dependency,
+    item_id: int = Path(..., description="ID dell'elemento da recuperare")
+) -> Dict:
+    """
+    Recupera un elemento specifico tramite il suo ID.
+    
+    Args:
+        item_id: ID dell'elemento
+        
+    Returns:
+        Dict: Risposta con i dettagli dell'elemento
+        
+    Raises:
+        HTTPException: Se l'elemento non esiste
+    """
+    if item_id not in items_db:
+        raise HTTPException(
+            status_code=404, 
+            detail=error_response(
+                message=f"Elemento con ID {item_id} non trovato",
+                error_type="NotFound"
+            )
+        )
+    
+    return success_response(
+        data=items_db[item_id],
+        message=f"Elemento {item_id} recuperato con successo"
+    )
+
+@router.post("/")
+async def create_item(item: Item, _: str = token_dependency) -> Dict:
+    """
+    Crea un nuovo elemento.
+    
+    Args:
+        item: Dati dell'elemento da creare
+        
+    Returns:
+        Dict: Risposta con i dettagli dell'elemento creato
+    """
+    global next_id
+    
+    # Assegna un ID se non è stato fornito
+    if item.id is None:
+        item.id = next_id
+        next_id += 1
+    
+    # Salva nel database fittizio
+    items_db[item.id] = item
+    
+    return success_response(
+        data=item,
+        message="Elemento creato con successo"
+    )
+
+@router.put("/{item_id}")
+async def update_item(
+    item_data: Item, 
+    _: str = token_dependency,
+    item_id: int = Path(..., description="ID dell'elemento da aggiornare")
+) -> Dict:
+    """
+    Aggiorna un elemento esistente.
+    
+    Args:
+        item_data: Nuovi dati dell'elemento
+        item_id: ID dell'elemento da aggiornare
+        
+    Returns:
+        Dict: Risposta con i dettagli dell'elemento aggiornato
+        
+    Raises:
+        HTTPException: Se l'elemento non esiste
+    """
+    if item_id not in items_db:
+        raise HTTPException(
+            status_code=404, 
+            detail=error_response(
+                message=f"Elemento con ID {item_id} non trovato",
+                error_type="NotFound"
+            )
+        )
+    
+    # Assicura che l'ID sia coerente
+    item_data.id = item_id
+    
+    # Aggiorna nel database fittizio
+    items_db[item_id] = item_data
+    
+    return success_response(
+        data=item_data,
+        message=f"Elemento {item_id} aggiornato con successo"
+    )
+
+@router.delete("/{item_id}")
+async def delete_item(
+    _: str = token_dependency,
+    item_id: int = Path(..., description="ID dell'elemento da eliminare")
+) -> Dict:
+    """
+    Elimina un elemento esistente.
+    
+    Args:
+        item_id: ID dell'elemento da eliminare
+        
+    Returns:
+        Dict: Risposta di conferma
+        
+    Raises:
+        HTTPException: Se l'elemento non esiste
+    """
+    if item_id not in items_db:
+        raise HTTPException(
+            status_code=404, 
+            detail=error_response(
+                message=f"Elemento con ID {item_id} non trovato",
+                error_type="NotFound"
+            )
+        )
+    
+    # Rimuove dal database fittizio
+    deleted_item = items_db.pop(item_id)
+    
+    return success_response(
+        data=deleted_item,
+        message=f"Elemento {item_id} eliminato con successo"
+    )

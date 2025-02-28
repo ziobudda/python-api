@@ -1,0 +1,18 @@
+# API Framework
+fastapi>=0.104.0
+uvicorn>=0.23.2
+
+# Utilities
+pydantic>=2.4.2
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=7.4.3
+httpx>=0.25.0
+
+# Browser Automation
+playwright>=1.41.0
+crawl4ai>=0.4.30x
+
+# Parsing e Filtri
+beautifulsoup4>=4.12.2
