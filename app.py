@@ -10,6 +10,7 @@ from config import settings
 from api.routes.browser import router as browser_router
 from api.routes.search import router as search_router
 from api.routes.crawl import router as crawl_router
+from api.routes.memory import router as memory_router
 
 # Inizializzazione dell'applicazione FastAPI
 app = FastAPI(
@@ -32,6 +33,7 @@ app.add_middleware(
 app.include_router(browser_router)
 app.include_router(search_router)
 app.include_router(crawl_router)
+app.include_router(memory_router)
 
 # Endpoint di base per verificare che l'API funzioni
 @app.get("/", tags=["Health"])

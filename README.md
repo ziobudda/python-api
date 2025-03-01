@@ -11,17 +11,29 @@ python-api/
 │   ├── routes/             # Endpoint API organizzati per moduli
 │   │   ├── browser.py      # Endpoint per automazione browser
 │   │   ├── search.py       # Endpoint per ricerche su Google
-│   │   └── crawl.py        # Endpoint per crawling con Crawl4AI
+│   │   ├── crawl.py        # Endpoint per crawling con Crawl4AI
+│   │   └── memory.py       # Endpoint per il sistema memory
 │   └── utils/              # Utilità condivise
 │       ├── responses.py    # Formattatori di risposta standardizzati
 │       ├── auth.py         # Gestione autenticazione
-│       └── browser/        # Modulo per automazione browser
-│           ├── page_loader.py    # Caricamento pagine web
-│           ├── google_search.py  # Funzionalità di ricerca Google
-│           └── crawl4ai_client.py # Client per Crawl4AI
+│       ├── browser/        # Modulo per automazione browser
+│       │   ├── page_loader.py    # Caricamento pagine web
+│       │   ├── google_search.py  # Funzionalità di ricerca Google
+│       │   └── crawl4ai_client.py # Client per Crawl4AI
+│       └── memory/         # Sistema di memorizzazione interazioni
+│           ├── memory_system.py  # Implementazione pattern singleton
+│           ├── manager.py        # Gestione operazioni di memoria
+│           ├── models.py         # Modelli di dati
+│           └── storage/          # Implementazioni di storage
 │
 ├── config/                 # Configurazioni
-│   └── settings.py         # Impostazioni dell'applicazione
+│   ├── settings.py         # Impostazioni dell'applicazione
+│   └── memory.yaml         # Configurazione del sistema memory
+│
+├── data/                   # Directory per dati persistenti
+│   └── memory/             # Dati del sistema memory
+│       ├── interactions.json  # Storage principale delle interazioni
+│       └── backups/        # Backup automatici
 │
 ├── tests/                  # Test automatizzati
 │
@@ -41,6 +53,7 @@ python-api/
 - Uvicorn
 - Playwright (per automazione browser)
 - Crawl4AI (per crawling avanzato)
+- PyYAML (per configurazione memory)
 - Altri pacchetti elencati in `requirements.txt`
 
 ## Installazione
@@ -64,6 +77,11 @@ python-api/
    ```
 
 4. Copia il file `.env.example` in `.env` e personalizza le variabili d'ambiente secondo necessità. Assicurati di impostare un valore sicuro per `API_TOKEN`.
+
+5. Crea le directory necessarie per il sistema memory:
+   ```
+   mkdir -p data/memory/backups
+   ```
 
 ## Avvio dell'Applicazione
 
@@ -131,14 +149,26 @@ curl -X POST "http://localhost:8000/api/browser/load" \
 curl -X GET "http://localhost:8000/api/crawl/page?url=https://www.example.com&content_filter=pruning" -H "accept: application/json" -H "X-API-Token: your_secret_token_here"
 ```
 
-### Eseguire un crawling avanzato con filtro BM25
+### Registrare una nuova interazione nel sistema memory
 
 ```bash
-curl -X POST "http://localhost:8000/api/crawl/page" \
+curl -X POST "http://localhost:8000/api/memory/interactions" \
      -H "accept: application/json" \
      -H "Content-Type: application/json" \
      -H "X-API-Token: your_secret_token_here" \
-     -d '{"url":"https://www.example.com/docs","content_filter":"bm25","bm25_query":"installation guide","extract_links":true,"screenshot":true}'
+     -d '{"agent_id":"example-agent","command":"example-command","prompt":"Esempio di prompt","response":"Esempio di risposta","cost":0.01,"metadata":{"key":"value"}}'
+```
+
+### Recuperare le interazioni recenti
+
+```bash
+curl -X GET "http://localhost:8000/api/memory/interactions/recent?limit=5" -H "accept: application/json" -H "X-API-Token: your_secret_token_here"
+```
+
+### Cercare nelle interazioni
+
+```bash
+curl -X GET "http://localhost:8000/api/memory/interactions/search?query=esempio" -H "accept: application/json" -H "X-API-Token: your_secret_token_here"
 ```
 
 ## Test
@@ -170,6 +200,14 @@ pytest
 - Filtri di contenuto per estrazione di informazioni rilevanti:
   - Pruning: rimuove contenuti irrilevanti in base alla densità di testo
   - BM25: filtra contenuti in base a rilevanza per una query specifica
+
+### Sistema Memory
+- Memorizzazione persistente delle interazioni API
+- Recupero e ricerca delle interazioni per vari criteri (ID, data, agente, ecc.)
+- Backup automatico dei dati
+- Configurazione flessibile tramite YAML
+- Pattern singleton per gestione efficiente delle risorse
+- Supporto per multi-storage per separare diversi tipi di interazioni
 
 ## Licenza
 

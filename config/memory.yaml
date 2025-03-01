@@ -1,0 +1,19 @@
+memory:
+  active_storage: default
+  storages:
+    default:
+      type: file
+      path: data/memory/interactions.json
+      backup:
+        enabled: true
+        backup_dir: data/memory/backups
+        max_backups: 10
+        interval_days: 7
+    analytics:
+      type: file
+      path: data/memory/analytics.json
+      backup:
+        enabled: true
+        backup_dir: data/memory/backups
+        max_backups: 5
+        interval_days: 14

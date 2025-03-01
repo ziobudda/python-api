@@ -34,3 +34,7 @@ CRAWL4AI_TIMEOUT = int(os.getenv("CRAWL4AI_TIMEOUT", "60"))  # Timeout in second
 CRAWL4AI_CACHE_MODE = os.getenv("CRAWL4AI_CACHE_MODE", "BYPASS")  # ENABLED, BYPASS, DISABLED
 CRAWL4AI_RATE_LIMIT = int(os.getenv("CRAWL4AI_RATE_LIMIT", "10"))  # Richieste per minuto
 CRAWL4AI_COOLDOWN = int(os.getenv("CRAWL4AI_COOLDOWN", "60"))  # Secondi di cooldown
+
+# Configurazioni Memory
+MEMORY_CONFIG_PATH = os.getenv("MEMORY_CONFIG_PATH", "config/memory.yaml")
+MEMORY_ACTIVE_STORAGE = os.getenv("MEMORY_ACTIVE_STORAGE", "default")
