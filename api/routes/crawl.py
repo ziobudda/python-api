@@ -7,9 +7,10 @@ from pydantic import BaseModel, HttpUrl
 from api.utils.responses import success_response, error_response
 from api.utils.auth import token_dependency
 from api.utils.browser.crawl4ai_client import crawl_web_page
-import logging
+from api.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+# Ottieni un logger configurato per questo modulo
+logger = get_logger(__name__)
 
 # Definizione dei modelli di dati
 class CrawlRequest(BaseModel):
@@ -51,8 +52,14 @@ async def crawl_page(
         dict: Risposta contenente i risultati del crawling
     """
     try:
+        logger.info(f"Avvio crawling POST per URL: {request.url}")
+        logger.debug(f"Parametri crawling: wait_for_load={request.wait_for_load}, extract_links={request.extract_links}, "
+                    f"extract_media={request.extract_media}, css_selector={request.css_selector}, "
+                    f"screenshot={request.screenshot}, content_filter={request.content_filter}")
+        
         # Verifica che il content_filter sia valido se fornito
         if request.content_filter and request.content_filter not in ["pruning", "bm25", None]:
+            logger.warning(f"Tentativo di utilizzo di filtro contenuti non valido: {request.content_filter}")
             return error_response(
                 message="Il filtro contenuti deve essere 'pruning', 'bm25' o null",
                 error_type="ValidationError",
@@ -61,6 +68,7 @@ async def crawl_page(
         
         # Verifica che bm25_query sia fornito se content_filter è 'bm25'
         if request.content_filter == "bm25" and not request.bm25_query:
+            logger.warning("Filtro BM25 specificato senza query BM25")
             return error_response(
                 message="La query BM25 è richiesta quando si utilizza il filtro 'bm25'",
                 error_type="ValidationError",
@@ -68,6 +76,7 @@ async def crawl_page(
             )
             
         # Esegui il crawling utilizzando Crawl4AI
+        logger.debug(f"Chiamata a crawl_web_page per {request.url}")
         result = await crawl_web_page(
             url=str(request.url),
             wait_for_load=request.wait_for_load,
@@ -104,6 +113,7 @@ async def crawl_page(
             # Aggiungi debug_details se presente e in modalità debug
             if "debug_details" in result and result["debug_details"]:
                 error_details["debug_details"] = result["debug_details"]
+                logger.debug(f"Debug details: {result['debug_details']}")
                 
             return error_response(
                 message=f"Impossibile completare il crawling: {error_msg}",
@@ -112,7 +122,13 @@ async def crawl_page(
             )
         
         # Log di successo
-        logger.info(f"Crawling completato con successo per {request.url} - HTML length: {result.get('html_length', 0)}, links: {result.get('internal_links_count', 0) + result.get('external_links_count', 0)}")
+        internal_links = result.get('internal_links_count', 0)
+        external_links = result.get('external_links_count', 0)
+        html_length = result.get('html_length', 0)
+        
+        logger.info(f"Crawling completato con successo per {request.url} - "
+                   f"HTML length: {html_length}, links: {internal_links + external_links} "
+                   f"(internal: {internal_links}, external: {external_links})")
         
         # Restituisci una risposta formattata con i risultati
         return success_response(
@@ -120,7 +136,7 @@ async def crawl_page(
             message=f"Crawling completato con successo: {request.url}"
         )
     except Exception as e:
-        logger.error(f"Errore durante il crawling della pagina: {str(e)}")
+        logger.error(f"Errore durante il crawling della pagina: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile eseguire il crawling della pagina: {str(e)}",
             error_type="CrawlError",
@@ -156,8 +172,14 @@ async def crawl_page_get(
         dict: Risposta contenente i risultati del crawling
     """
     try:
+        logger.info(f"Avvio crawling GET per URL: {url}")
+        logger.debug(f"Parametri crawling: wait_for_load={wait_for_load}, extract_links={extract_links}, "
+                    f"extract_media={extract_media}, css_selector={css_selector}, "
+                    f"screenshot={screenshot}, content_filter={content_filter}")
+                    
         # Verifica che il content_filter sia valido se fornito
         if content_filter and content_filter not in ["pruning", "bm25", None]:
+            logger.warning(f"Tentativo di utilizzo di filtro contenuti non valido: {content_filter}")
             return error_response(
                 message="Il filtro contenuti deve essere 'pruning', 'bm25' o null",
                 error_type="ValidationError",
@@ -166,6 +188,7 @@ async def crawl_page_get(
         
         # Verifica che bm25_query sia fornito se content_filter è 'bm25'
         if content_filter == "bm25" and not bm25_query:
+            logger.warning("Filtro BM25 specificato senza query BM25")
             return error_response(
                 message="La query BM25 è richiesta quando si utilizza il filtro 'bm25'",
                 error_type="ValidationError",
@@ -173,6 +196,7 @@ async def crawl_page_get(
             )
         
         # Esegui il crawling utilizzando Crawl4AI
+        logger.debug(f"Chiamata a crawl_web_page per {url}")
         result = await crawl_web_page(
             url=url,
             wait_for_load=wait_for_load,
@@ -198,6 +222,7 @@ async def crawl_page_get(
             # Aggiungi debug_details se presente e in modalità debug
             if "debug_details" in result and result["debug_details"]:
                 error_details["debug_details"] = result["debug_details"]
+                logger.debug(f"Debug details: {result['debug_details']}")
                 
             return error_response(
                 message=f"Impossibile completare il crawling: {error_msg}",
@@ -206,7 +231,13 @@ async def crawl_page_get(
             )
         
         # Log di successo
-        logger.info(f"Crawling completato con successo per {url} - HTML length: {result.get('html_length', 0)}, links: {result.get('internal_links_count', 0) + result.get('external_links_count', 0)}")
+        internal_links = result.get('internal_links_count', 0)
+        external_links = result.get('external_links_count', 0)
+        html_length = result.get('html_length', 0)
+        
+        logger.info(f"Crawling completato con successo per {url} - "
+                   f"HTML length: {html_length}, links: {internal_links + external_links} "
+                   f"(internal: {internal_links}, external: {external_links})")
         
         # Restituisci una risposta formattata con i risultati
         return success_response(
@@ -214,7 +245,7 @@ async def crawl_page_get(
             message=f"Crawling completato con successo: {url}"
         )
     except Exception as e:
-        logger.error(f"Errore durante il crawling della pagina: {str(e)}")
+        logger.error(f"Errore durante il crawling della pagina: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile eseguire il crawling della pagina: {str(e)}",
             error_type="CrawlError",

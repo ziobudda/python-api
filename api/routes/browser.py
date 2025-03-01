@@ -4,9 +4,10 @@ from pydantic import BaseModel, HttpUrl
 from api.utils.responses import success_response, error_response
 from api.utils.auth import token_dependency
 from api.utils.browser.page_loader import load_page
-import logging
+from api.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+# Ottieni un logger per questo modulo
+logger = get_logger(__name__)
 
 # Definizione dei modelli di dati
 class BrowserRequest(BaseModel):
@@ -38,6 +39,9 @@ async def load_webpage(
         dict: Risposta contenente le informazioni sulla pagina
     """
     try:
+        # Log dell'inizio dell'operazione
+        logger.info(f"Avvio caricamento pagina: {request.url}")
+        
         # Carica la pagina utilizzando un browser automatizzato
         result = await load_page(
             url=str(request.url),
@@ -51,13 +55,15 @@ async def load_webpage(
             extract_structured_data=request.extract_structured_data
         )
         
+        logger.info(f"Pagina caricata con successo: {request.url}")
+        
         # Restituisci una risposta formattata con i risultati
         return success_response(
             data=result,
             message=f"Pagina caricata con successo: {request.url}"
         )
     except Exception as e:
-        logger.error(f"Errore durante il caricamento della pagina: {str(e)}")
+        logger.error(f"Errore durante il caricamento della pagina: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile caricare la pagina: {str(e)}",
             error_type="BrowserError",
@@ -87,6 +93,9 @@ async def load_webpage_get(
         dict: Risposta contenente le informazioni sulla pagina
     """
     try:
+        # Log dell'inizio dell'operazione
+        logger.info(f"Avvio caricamento pagina (GET): {url}")
+        
         # Carica la pagina utilizzando un browser automatizzato
         result = await load_page(
             url=url,
@@ -97,13 +106,15 @@ async def load_webpage_get(
             extract_structured_data=extract_structured_data
         )
         
+        logger.info(f"Pagina caricata con successo (GET): {url}")
+        
         # Restituisci una risposta formattata con i risultati
         return success_response(
             data=result,
             message=f"Pagina caricata con successo: {url}"
         )
     except Exception as e:
-        logger.error(f"Errore durante il caricamento della pagina: {str(e)}")
+        logger.error(f"Errore durante il caricamento della pagina (GET): {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile caricare la pagina: {str(e)}",
             error_type="BrowserError",

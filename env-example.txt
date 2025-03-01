@@ -1,0 +1,27 @@
+# Ambiente
+ENV=development
+DEBUG=true
+
+# Server
+HOST=0.0.0.0
+PORT=8000
+
+# Configurazione Logging
+LOG_LEVEL=debug
+LOG_TO_FILE=false
+LOG_FILE_PATH=logs/app.log
+LOG_FILE_MAX_SIZE=10485760  # 10MB in bytes
+LOG_FILE_BACKUP_COUNT=3
+
+# Configurazione autenticazione API
+API_TOKEN=your_secure_token_here
+
+# Google Search
+GOOGLE_DEFAULT_LANG=it
+GOOGLE_MAX_RESULTS=20
+GOOGLE_MAX_PAGES=5
+GOOGLE_SLEEP_INTERVAL=2.0
+
+# Configurazioni Memory
+MEMORY_CONFIG_PATH=config/memory.yaml
+MEMORY_ACTIVE_STORAGE=default

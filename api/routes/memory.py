@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Path
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-import logging
+import time
 
 from api.utils.responses import success_response, error_response
 from api.utils.auth import token_dependency
 from api.utils.memory import MemorySystem, Interaction, InteractionCreate, InteractionResponse, InteractionsListResponse
+from api.utils.logging_config import get_logger
 from config import settings
 
-logger = logging.getLogger(__name__)
+# Ottieni un logger configurato per questo modulo
+logger = get_logger(__name__)
 
 # Inizializzazione del sistema memory
 memory_system = MemorySystem.get_instance(settings.MEMORY_CONFIG_PATH)
@@ -33,7 +35,8 @@ async def create_interaction(
         Dict: Risposta con l'ID dell'interazione creata
     """
     try:
-        logger.info(f"Registrazione nuova interazione: {interaction.command}")
+        logger.info(f"Registrazione nuova interazione: agent={interaction.agent_id}, command={interaction.command}")
+        logger.debug(f"Prompt: {interaction.prompt[:100]}{'...' if len(interaction.prompt) > 100 else ''}")
         
         # Registra l'interazione
         interaction_id = memory_manager.record_interaction(
@@ -45,10 +48,13 @@ async def create_interaction(
             metadata=interaction.metadata
         )
         
+        logger.info(f"Interazione registrata con ID: {interaction_id}")
+        
         # Recupera l'interazione per restituirla
         created_interaction = memory_manager.get_interaction(interaction_id)
         
         if not created_interaction:
+            logger.warning(f"Interazione creata ma impossibile recuperarla: {interaction_id}")
             return error_response(
                 message="Interazione creata ma impossibile recuperarla",
                 error_type="MemoryRetrievalError"
@@ -71,7 +77,7 @@ async def create_interaction(
             message=f"Interazione registrata con successo: {interaction_id}"
         )
     except Exception as e:
-        logger.error(f"Errore nella registrazione dell'interazione: {str(e)}")
+        logger.error(f"Errore nella registrazione dell'interazione: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile registrare l'interazione: {str(e)}",
             error_type="MemoryError"
@@ -92,17 +98,20 @@ async def get_interaction(
         Dict: Risposta con i dettagli dell'interazione
     """
     try:
-        logger.info(f"Richiesta interazione: {interaction_id}")
+        logger.info(f"Richiesta recupero interazione: {interaction_id}")
         
         # Recupera l'interazione
         interaction = memory_manager.get_interaction(interaction_id)
         
         if not interaction:
+            logger.warning(f"Interazione non trovata: {interaction_id}")
             return error_response(
                 message=f"Interazione non trovata: {interaction_id}",
                 error_type="InteractionNotFound",
                 status_code=404
             )
+        
+        logger.debug(f"Interazione recuperata: {interaction.id} - {interaction.command} ({interaction.timestamp})")
         
         # Converti l'interazione in formato di risposta
         response_data = {
@@ -120,7 +129,7 @@ async def get_interaction(
             data=response_data
         )
     except Exception as e:
-        logger.error(f"Errore nel recupero dell'interazione {interaction_id}: {str(e)}")
+        logger.error(f"Errore nel recupero dell'interazione {interaction_id}: {str(e)}", exc_info=True)
         return error_response(
             message=f"Errore nel recupero dell'interazione: {str(e)}",
             error_type="MemoryRetrievalError"
@@ -148,12 +157,19 @@ async def list_interactions(
         logger.info(f"Richiesta lista interazioni (agent_id={agent_id}, command={command}, limit={limit})")
         
         # Recupera le interazioni in base ai filtri
+        start_time = time.time()
         if agent_id and command:
             interactions = memory_manager.find_by_command_and_agent(command, agent_id, limit)
+            filter_desc = f"agent={agent_id}, command={command}"
         elif agent_id:
             interactions = memory_manager.find_recent_interactions(limit, agent_id)
+            filter_desc = f"agent={agent_id}"
         else:
             interactions = memory_manager.find_recent_interactions(limit)
+            filter_desc = "tutte"
+        
+        elapsed_time = time.time() - start_time
+        logger.debug(f"Recupero completato in {elapsed_time:.3f}s - Trovate {len(interactions)} interazioni ({filter_desc})")
         
         # Converti le interazioni in formato di risposta
         response_data = []
@@ -177,7 +193,7 @@ async def list_interactions(
             message=f"Recuperate {len(response_data)} interazioni"
         )
     except Exception as e:
-        logger.error(f"Errore nel recupero della lista di interazioni: {str(e)}")
+        logger.error(f"Errore nel recupero della lista di interazioni: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile recuperare le interazioni: {str(e)}",
             error_type="MemoryListError"
@@ -203,7 +219,11 @@ async def recent_interactions(
         logger.info(f"Richiesta interazioni recenti (limit={limit}, agent_id={agent_id})")
         
         # Recupera le interazioni recenti
+        start_time = time.time()
         interactions = memory_manager.find_recent_interactions(limit, agent_id)
+        elapsed_time = time.time() - start_time
+        
+        logger.debug(f"Recupero completato in {elapsed_time:.3f}s - Trovate {len(interactions)} interazioni recenti")
         
         # Converti le interazioni in formato di risposta
         response_data = []
@@ -227,7 +247,7 @@ async def recent_interactions(
             message=f"Recuperate {len(response_data)} interazioni recenti"
         )
     except Exception as e:
-        logger.error(f"Errore nel recupero delle interazioni recenti: {str(e)}")
+        logger.error(f"Errore nel recupero delle interazioni recenti: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile recuperare le interazioni recenti: {str(e)}",
             error_type="MemoryRecentError"
@@ -258,20 +278,26 @@ async def interactions_by_date(
         try:
             target_date = datetime(year, month, day)
         except ValueError as e:
+            logger.warning(f"Richiesta con data non valida: {year}-{month}-{day} ({str(e)})")
             return error_response(
                 message=f"Data non valida: {str(e)}",
                 error_type="InvalidDateError",
                 status_code=400
             )
         
-        logger.info(f"Richiesta interazioni per data: {target_date.date()}")
+        logger.info(f"Richiesta interazioni per data: {target_date.date()} (agent_id={agent_id})")
         
         # Recupera le interazioni per la data
+        start_time = time.time()
         interactions = memory_manager.find_interactions_by_date(target_date)
         
         # Filtra per agent_id se specificato
         if agent_id:
+            logger.debug(f"Filtraggio per agent_id: {agent_id}")
             interactions = [i for i in interactions if i.agent_id == agent_id]
+        
+        elapsed_time = time.time() - start_time
+        logger.debug(f"Recupero completato in {elapsed_time:.3f}s - Trovate {len(interactions)} interazioni per la data {target_date.date()}")
         
         # Converti le interazioni in formato di risposta
         response_data = []
@@ -296,7 +322,7 @@ async def interactions_by_date(
             message=f"Recuperate {len(response_data)} interazioni per la data {target_date.date()}"
         )
     except Exception as e:
-        logger.error(f"Errore nel recupero delle interazioni per data: {str(e)}")
+        logger.error(f"Errore nel recupero delle interazioni per data: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile recuperare le interazioni per data: {str(e)}",
             error_type="MemoryDateError"
@@ -321,10 +347,11 @@ async def search_interactions(
         Dict: Risposta con la lista delle interazioni che contengono il testo cercato
     """
     try:
-        logger.info(f"Ricerca interazioni con query: '{query}'")
+        logger.info(f"Ricerca interazioni con query: '{query}' (limit={limit}, agent_id={agent_id})")
         
         # Cerca nelle interazioni
         query_lower = query.lower()
+        start_time = time.time()
         
         def search_filter(interaction: Interaction) -> bool:
             # Filtra per agent_id se specificato
@@ -351,6 +378,8 @@ async def search_interactions(
             None  # Senza limiti
         )
         
+        logger.debug(f"Filtraggio di {len(all_interactions)} interazioni totali per la query '{query}'")
+        
         # Filtra e limita i risultati
         matching_interactions = []
         for interaction in all_interactions:
@@ -361,6 +390,9 @@ async def search_interactions(
         
         # Ordina per timestamp decrescente
         matching_interactions.sort(key=lambda x: x.timestamp, reverse=True)
+        
+        elapsed_time = time.time() - start_time
+        logger.debug(f"Ricerca completata in {elapsed_time:.3f}s - Trovate {len(matching_interactions)} interazioni per '{query}'")
         
         # Converti le interazioni in formato di risposta
         response_data = []
@@ -385,7 +417,7 @@ async def search_interactions(
             message=f"Trovate {len(response_data)} interazioni per la query '{query}'"
         )
     except Exception as e:
-        logger.error(f"Errore nella ricerca di interazioni: {str(e)}")
+        logger.error(f"Errore nella ricerca di interazioni: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile completare la ricerca: {str(e)}",
             error_type="MemorySearchError"

@@ -4,14 +4,15 @@ from typing import Optional, List, Dict, Any
 from api.utils.responses import success_response, error_response
 from api.utils.auth import token_dependency
 from api.utils.browser.google_search import search_google
+from api.utils.logging_config import get_logger
 from config import settings
-import logging
 import base64
 import asyncio
 import time
 from datetime import datetime
 
-logger = logging.getLogger(__name__)
+# Ottieni un logger configurato per questo modulo
+logger = get_logger(__name__)
 
 # Definizione dei modelli di dati
 class SearchResult(BaseModel):
@@ -44,13 +45,14 @@ class RateLimiter:
         
         # Controlla se è in cooldown
         if self.cooldown_until and now < self.cooldown_until:
-            logger.warning(f"Client {client_id} in cooldown fino a {datetime.fromtimestamp(self.cooldown_until)}")
+            cooldown_end = datetime.fromtimestamp(self.cooldown_until).strftime('%H:%M:%S')
+            logger.warning(f"Client {client_id} in cooldown fino a {cooldown_end}")
             return False
         
         # Controlla il rate limit
         client_requests = [r for r in self.requests if r["client_id"] == client_id]
         if len(client_requests) >= self.rate_limit:
-            logger.warning(f"Rate limit superato per il client {client_id}, impostando cooldown")
+            logger.warning(f"Rate limit superato per il client {client_id} ({len(client_requests)}/{self.rate_limit} richieste). Impostazione cooldown di {self.cooldown} secondi.")
             self.cooldown_until = now + self.cooldown
             return False
         
@@ -60,6 +62,7 @@ class RateLimiter:
             "client_id": client_id
         })
         
+        logger.debug(f"Richiesta consentita per client {client_id}. Richieste attuali: {len(client_requests) + 1}/{self.rate_limit}")
         return True
 
 # Creazione del rate limiter
@@ -102,6 +105,7 @@ async def google_search(
     """
     # Controllo rate limiting
     if not rate_limiter.check_limit(client_id=token):
+        logger.warning(f"Rate limit superato per la ricerca: '{query}'")
         return error_response(
             message="Troppe richieste. Riprova più tardi.",
             error_type="RateLimitExceeded",
@@ -109,9 +113,11 @@ async def google_search(
         )
     
     try:
-        logger.info(f"Inizio ricerca Google: '{query}' in lingua {lang}, max {num_results} risultati per pagina, max {max_pages} pagine")
+        logger.info(f"Avvio ricerca Google (GET): '{query}' in lingua {lang}, max {num_results} risultati per pagina, max {max_pages} pagine")
+        logger.debug(f"Parametri ricerca: sleep_interval={sleep_interval}, use_stealth={use_stealth}, use_proxy={use_proxy}, retry_count={retry_count}")
         
         # Esegui la ricerca su Google con timeout
+        start_time = time.time()
         try:
             search_results = await asyncio.wait_for(
                 search_google(
@@ -125,21 +131,25 @@ async def google_search(
                 timeout=settings.SEARCH_TIMEOUT * max_pages  # Aumenta il timeout in base al numero di pagine
             )
         except asyncio.TimeoutError:
-            logger.error(f"Timeout durante la ricerca di '{query}'")
+            elapsed_time = time.time() - start_time
+            logger.error(f"Timeout dopo {elapsed_time:.2f}s durante la ricerca di '{query}' (timeout: {settings.SEARCH_TIMEOUT * max_pages}s)")
             return error_response(
                 message=f"La ricerca ha impiegato troppo tempo per completarsi",
                 error_type="SearchTimeout",
-                details={"query": query}
+                details={"query": query, "elapsed_seconds": round(elapsed_time, 2)}
             )
+        
+        # Calcola il tempo impiegato
+        elapsed_time = time.time() - start_time
         
         # Log dei risultati ottenuti
         result_count = len(search_results.get("results", []))
         pages_fetched = search_results.get("pages_fetched", 1)
-        logger.info(f"Ricerca completata: trovati {result_count} risultati in {pages_fetched} pagine per '{query}'")
+        logger.info(f"Ricerca completata in {elapsed_time:.2f}s: trovati {result_count} risultati in {pages_fetched} pagine per '{query}'")
         
         # Verifica se abbiamo trovato un errore specifico di Google
         if "ERRORE:" in search_results.get("stats", ""):
-            logger.warning(f"Google ha bloccato la richiesta per '{query}'")
+            logger.warning(f"Google ha bloccato la richiesta per '{query}' (possibile CAPTCHA)")
             return error_response(
                 message="Google ha rilevato attività insolita e ha bloccato la richiesta. Riprova più tardi.",
                 error_type="GoogleBlockError",
@@ -149,6 +159,7 @@ async def google_search(
         # Prepara i dati di debug
         debug_info = None
         if include_screenshot and "screenshot" in search_results:
+            logger.debug(f"Includendo screenshot nei risultati per '{query}'")
             debug_info = {
                 "screenshot": search_results["screenshot"]
             }
@@ -173,7 +184,7 @@ async def google_search(
             message=f"Ricerca completata con successo: {query} ({result_count} risultati da {pages_fetched} pagine)"
         )
     except Exception as e:
-        logger.error(f"Errore durante la ricerca: {str(e)}")
+        logger.error(f"Errore durante la ricerca: {str(e)}", exc_info=True)
         return error_response(
             message=f"Impossibile completare la ricerca: {str(e)}",
             error_type="SearchError",
@@ -209,6 +220,7 @@ async def google_search_post(
     Returns:
         dict: Risposta con i risultati della ricerca
     """
+    logger.info(f"Avvio ricerca Google (POST): '{query}' in lingua {lang}")
     # Riutilizza la funzione di ricerca esistente
     return await google_search(
         query=query, 
